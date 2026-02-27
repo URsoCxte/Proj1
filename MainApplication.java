@@ -14,7 +14,7 @@ public class MainApplication {
         private String[] Board;
         private int num;
         private int emptyIndex;
-        private Set<String> doneMarbles = new HashSet<>();  // track done marbles
+        private Set<String> doneMarbles = new HashSet<>();
 
         public marbleBoard(int n) {
             this.num = n;
@@ -67,22 +67,16 @@ public class MainApplication {
             return doneMarbles;
         }
 
-        // Check if a marble's neighbor in its direction is done
-        public boolean isNeighborDone(int currentIndex, String marbleId) {
-            if (marbleId.startsWith("w")) {
-                // White moves right, check right neighbor
-                int rightNeighbor = currentIndex + 1;
-                if (rightNeighbor < Board.length && !Board[rightNeighbor].equals("__")) {
-                    return doneMarbles.contains(Board[rightNeighbor]);
-                }
-            } else {
-                // Black moves left, check left neighbor
-                int leftNeighbor = currentIndex - 1;
-                if (leftNeighbor >= 0 && !Board[leftNeighbor].equals("__")) {
-                    return doneMarbles.contains(Board[leftNeighbor]);
+        // Restore board state from saved state
+        public void restoreState(String[] savedBoard, Set<String> savedDone) {
+            for (int i = 0; i < Board.length; i++) {
+                Board[i] = savedBoard[i];
+                if (Board[i].equals("__")) {
+                    emptyIndex = i;
                 }
             }
-            return false;
+            doneMarbles.clear();
+            doneMarbles.addAll(savedDone);
         }
 
         public boolean move(String marbleId, boolean silent) {
@@ -95,8 +89,8 @@ public class MainApplication {
                 }
             }
 
-            if (currentIndex == -1 && !marbleId.equalsIgnoreCase("a")) {
-                System.out.printf("%19s %s\n", "Not Found", marbleId);
+            if (currentIndex == -1) {
+                if (!silent) System.out.printf("%19s %s\n", "Not Found", marbleId);
                 return false;
             }
 
@@ -110,12 +104,6 @@ public class MainApplication {
                 } else if (currentIndex + 2 == emptyIndex && Board[currentIndex + 1].startsWith("b")) {
                     canMove = true;
                     moveType = "Jump right";
-                } // Rule 2: allow move into same color if that neighbor is done
-                else if (currentIndex + 1 < Board.length && Board[currentIndex + 1].startsWith("w")
-                        && doneMarbles.contains(Board[currentIndex + 1])
-                        && currentIndex + 1 == emptyIndex) {
-                    canMove = true;
-                    moveType = "Move right (done neighbor)";
                 }
             }
 
@@ -126,12 +114,6 @@ public class MainApplication {
                 } else if (currentIndex - 2 == emptyIndex && Board[currentIndex - 1].startsWith("w")) {
                     canMove = true;
                     moveType = "Jump left";
-                } // Rule 2: allow move into same color if that neighbor is done
-                else if (currentIndex - 1 >= 0 && Board[currentIndex - 1].startsWith("b")
-                        && doneMarbles.contains(Board[currentIndex - 1])
-                        && currentIndex - 1 == emptyIndex) {
-                    canMove = true;
-                    moveType = "Move left (done neighbor)";
                 }
             }
 
@@ -141,7 +123,6 @@ public class MainApplication {
                 Board[currentIndex] = "__";
                 emptyIndex = currentIndex;
 
-                // Find new position of marble
                 int newIndex = -1;
                 for (int i = 0; i < Board.length; i++) {
                     if (Board[i].equals(marbleId)) {
@@ -150,7 +131,7 @@ public class MainApplication {
                     }
                 }
 
-                // Rule 1: check if marble has reached the end
+                // Mark done if reached end
                 if (marbleId.startsWith("w") && newIndex == Board.length - 1) {
                     doneMarbles.add(marbleId);
                     if (!silent) System.out.printf("%12s : %s is done!\n", marbleId, marbleId);
@@ -159,9 +140,9 @@ public class MainApplication {
                     if (!silent) System.out.printf("%12s : %s is done!\n", marbleId, marbleId);
                 }
 
+                // Mark done if next to a done marble of same color
                 if (!doneMarbles.contains(marbleId)) {
                     if (marbleId.startsWith("w")) {
-                        // Check right neighbor
                         if (newIndex + 1 < Board.length
                                 && Board[newIndex + 1].startsWith("w")
                                 && doneMarbles.contains(Board[newIndex + 1])) {
@@ -169,7 +150,6 @@ public class MainApplication {
                             if (!silent) System.out.printf("%12s : %s is done!\n", marbleId, marbleId);
                         }
                     } else if (marbleId.startsWith("b")) {
-                        // Check left neighbor
                         if (newIndex - 1 >= 0
                                 && Board[newIndex - 1].startsWith("b")
                                 && doneMarbles.contains(Board[newIndex - 1])) {
@@ -181,193 +161,195 @@ public class MainApplication {
 
                 return true;
             } else {
-                if (!marbleId.equalsIgnoreCase("a")) {
-                    if (!silent) System.out.printf("%21s: %s\n", "Cannot move", marbleId);
-                }
+                if (!silent) System.out.printf("%21s: %s\n", "Cannot move", marbleId);
                 return false;
             }
         }
     }
 
-// Updated tryMove to respect done status
-    private boolean tryMove(marbleBoard board, String color) {
-        String[] boardArr = board.getBoard();
-        Set<String> doneMarbles = board.getDoneMarbles();
+    // State class to save board state for backtracking
+    class BoardState {
+        String[] board;
+        Set<String> doneMarbles;
+        String lastMovedMarble; // which marble was just moved to reach this state
+        String color;           // which color was being tried
 
-        if (color.equals("w")) {
-            for (int i = boardArr.length - 1; i >= 0; i--) {
-                if (boardArr[i].startsWith("w")) {
-                    int emptyIdx = getEmptyIndex(boardArr);
-                    boolean canMove = (i + 1 == emptyIdx)
-                            || (i + 2 == emptyIdx && boardArr[i + 1].startsWith("b"));
-
-                    if (canMove) {
-                        int landingPos = emptyIdx;
-                        boolean rightSame = (landingPos + 1 < boardArr.length)
-                                && boardArr[landingPos + 1].startsWith("w")
-                                && !doneMarbles.contains(boardArr[landingPos + 1]); // Rule 2: allow if done
-
-                        if (!rightSame) {
-                            if (board.move(boardArr[i], true)) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            for (int i = 0; i < boardArr.length; i++) {
-                if (boardArr[i].startsWith("b")) {
-                    int emptyIdx = getEmptyIndex(boardArr);
-                    boolean canMove = (i - 1 == emptyIdx)
-                            || (i - 2 == emptyIdx && boardArr[i - 1].startsWith("w"));
-
-                    if (canMove) {
-                        int landingPos = emptyIdx;
-                        boolean leftSame = (landingPos - 1 >= 0)
-                                && boardArr[landingPos - 1].startsWith("b")
-                                && !doneMarbles.contains(boardArr[landingPos - 1]); // Rule 2: allow if done
-
-                        if (!leftSame) {
-                            if (board.move(boardArr[i], true)) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean checkViolatesRule1(String[] boardArr, String color, Set<String> doneMarbles) {
-        if (color.equals("w")) {
-            for (int i = boardArr.length - 1; i >= 0; i--) {
-                if (boardArr[i].startsWith("w")) {
-                    int emptyIdx = getEmptyIndex(boardArr);
-                    boolean canMove = (i + 1 == emptyIdx)
-                            || (i + 2 == emptyIdx && boardArr[i + 1].startsWith("b"));
-
-                    if (canMove) {
-                        int landingPos = emptyIdx;
-                        boolean rightSame = (landingPos + 1 < boardArr.length)
-                                && boardArr[landingPos + 1].startsWith("w")
-                                && !doneMarbles.contains(boardArr[landingPos + 1]);
-                        return rightSame;
-                    }
-                }
-            }
-        } else {
-            for (int i = 0; i < boardArr.length; i++) {
-                if (boardArr[i].startsWith("b")) {
-                    int emptyIdx = getEmptyIndex(boardArr);
-                    boolean canMove = (i - 1 == emptyIdx)
-                            || (i - 2 == emptyIdx && boardArr[i - 1].startsWith("w"));
-
-                    if (canMove) {
-                        int landingPos = emptyIdx;
-                        boolean leftSame = (landingPos - 1 >= 0)
-                                && boardArr[landingPos - 1].startsWith("b")
-                                && !doneMarbles.contains(boardArr[landingPos - 1]);
-                        return leftSame;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean canColorMove(String[] boardArr, String color) {
-        if (color.equals("w")) {
-            for (int i = boardArr.length - 1; i >= 0; i--) {
-                if (boardArr[i].startsWith("w")) {
-                    int emptyIdx = getEmptyIndex(boardArr);
-                    if ((i + 1 == emptyIdx)
-                            || (i + 2 == emptyIdx && boardArr[i + 1].startsWith("b"))) {
-                        return true;
-                    }
-                }
-            }
-        } else {
-            for (int i = 0; i < boardArr.length; i++) {
-                if (boardArr[i].startsWith("b")) {
-                    int emptyIdx = getEmptyIndex(boardArr);
-                    if ((i - 1 == emptyIdx)
-                            || (i - 2 == emptyIdx && boardArr[i - 1].startsWith("w"))) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    public void autoSolve(marbleBoard board, int startStep) {
-        int step = startStep;
-        String[] boardArr = board.getBoard();
-        String currentColor = "w";
-
-        while (!board.isGameOver()) {
-            
-
-            boolean moved = false;
-            boolean switchedDueToRule1 = false;
-
-            moved = tryMove(board, currentColor);
-
-            if (!moved) {
-                boolean violatesRule1 = checkViolatesRule1(boardArr, currentColor, board.getDoneMarbles());
-
-                if (violatesRule1) {
-                    currentColor = currentColor.equals("w") ? "b" : "w";
-                    switchedDueToRule1 = true;
-                } else {
-                    // Rule 3: no valid move, try switching color
-                    String oppositeColor = currentColor.equals("w") ? "b" : "w";
-                    if (!checkViolatesRule1(boardArr, oppositeColor, board.getDoneMarbles())
-                            && canColorMove(boardArr, oppositeColor)) {
-                        currentColor = oppositeColor;
-                    } else {
-                        System.out.println("No solution !!");
-                        return;
-                    }
-                }
-            }
-
-            if (switchedDueToRule1) {
-                continue;
-            }
-            if (!moved) {
-                continue;
-            }
-            
-            //System.out.println("=".repeat(103));
-            System.out.print("Auto " + step + " >> ");
-            //System.out.printf("%15s : ", "Board");
-            board.printBoard();
-            step++;
-        }
-
-        if (board.isGameOver()) {
-            //System.out.println("=".repeat(103));
-            System.out.println("Done !!");
+        BoardState(String[] board, Set<String> done, String lastMoved, String color) {
+            this.board = Arrays.copyOf(board, board.length);
+            this.doneMarbles = new HashSet<>(done);
+            this.lastMovedMarble = lastMoved;
+            this.color = color;
         }
     }
 
     private int getEmptyIndex(String[] board) {
         for (int i = 0; i < board.length; i++) {
-            if (board[i].equals("__")) {
-                return i;
-            }
+            if (board[i].equals("__")) return i;
         }
         return -1;
+    }
+
+    // Get list of movable marbles for a color, checking Rule 1 (no same-color non-done neighbor at landing)
+    // Returns ordered list: white searches right-to-left, black searches left-to-right
+    private List<String> getMovableMarblesInOrder(String[] boardArr, String color, Set<String> doneMarbles, String skipMarble) {
+        List<String> candidates = new ArrayList<>();
+        int emptyIdx = getEmptyIndex(boardArr);
+
+        if (color.equals("w")) {
+            for (int i = boardArr.length - 1; i >= 0; i--) {
+                if (boardArr[i].startsWith("w")) {
+                    String marbleId = boardArr[i];
+                    if (marbleId.equals(skipMarble)) continue;
+
+                    boolean canMove = (i + 1 == emptyIdx)
+                            || (i + 2 == emptyIdx && boardArr[i + 1].startsWith("b"));
+
+                    if (canMove) {
+                        int landingPos = emptyIdx;
+                        // Rule 1: landing position must not have a non-done same color marble next to it
+                        boolean violatesRule1 = (landingPos + 1 < boardArr.length)
+                                && boardArr[landingPos + 1].startsWith("w")
+                                && !doneMarbles.contains(boardArr[landingPos + 1]);
+
+                        if (!violatesRule1) {
+                            candidates.add(marbleId);
+                        }
+                    }
+                }
+            }
+        } else {
+            for (int i = 0; i < boardArr.length; i++) {
+                if (boardArr[i].startsWith("b")) {
+                    String marbleId = boardArr[i];
+                    if (marbleId.equals(skipMarble)) continue;
+
+                    boolean canMove = (i - 1 == emptyIdx)
+                            || (i - 2 == emptyIdx && boardArr[i - 1].startsWith("w"));
+
+                    if (canMove) {
+                        int landingPos = emptyIdx;
+                        boolean violatesRule1 = (landingPos - 1 >= 0)
+                                && boardArr[landingPos - 1].startsWith("b")
+                                && !doneMarbles.contains(boardArr[landingPos - 1]);
+
+                        if (!violatesRule1) {
+                            candidates.add(marbleId);
+                        }
+                    }
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    public void autoSolve(marbleBoard board, int startStep) {
+        int step = startStep;
+
+        // Stack stores states BEFORE each move, along with which marble was moved
+        Deque<BoardState> stack = new ArrayDeque<>();
+
+        String currentColor = "w";
+
+        // Try both colors alternately using backtracking
+        // We need a different approach: at each step, try all possible moves
+        // Stack stores: (state before move, marble that was moved, color tried)
+
+        // Save initial state
+        String[] initBoard = Arrays.copyOf(board.getBoard(), board.getBoard().length);
+        Set<String> initDone = new HashSet<>(board.getDoneMarbles());
+
+        // We use an iterative DFS with explicit stack
+        // Each stack entry = state before a move was applied
+        // We also track which marbles have been tried from each state
+
+        // Redesign: stack holds BoardState (state BEFORE move) + index of next marble to try
+        // Use a different stack structure
+
+        // Stack of: [savedState, listOfCandidates, nextCandidateIndex]
+        Deque<Object[]> dfsStack = new ArrayDeque<>();
+
+        // Get initial candidates
+        List<String> initCandidates = new ArrayList<>();
+        initCandidates.addAll(getMovableMarblesInOrder(board.getBoard(), "w", board.getDoneMarbles(), null));
+        initCandidates.addAll(getMovableMarblesInOrder(board.getBoard(), "b", board.getDoneMarbles(), null));
+
+        if (!initCandidates.isEmpty()) {
+            dfsStack.push(new Object[]{
+                new BoardState(board.getBoard(), board.getDoneMarbles(), null, currentColor),
+                initCandidates,
+                0
+            });
+        }
+
+        boolean solved = false;
+
+        while (!dfsStack.isEmpty()) {
+            Object[] top = dfsStack.peek();
+            BoardState savedState = (BoardState) top[0];
+            List<String> candidates = (List<String>) top[1];
+            int idx = (int) top[2];
+
+            if (idx >= candidates.size()) {
+                // Backtrack: no more candidates to try from this state
+                dfsStack.pop();
+                // Restore board to savedState
+                board.restoreState(savedState.board, savedState.doneMarbles);
+                step--;
+                continue;
+            }
+
+            // Try next candidate
+            top[2] = idx + 1; // advance index for next time we revisit this frame
+
+            String marbleToMove = candidates.get(idx);
+
+            // Restore board to the saved state before attempting this move
+            board.restoreState(savedState.board, savedState.doneMarbles);
+
+            // Attempt move
+            boolean moved = board.move(marbleToMove, true);
+            if (!moved) continue;
+
+            // Print board state
+            System.out.print("Auto " + step + " >> ");
+            board.printBoard();
+            step++;
+
+            if (board.isGameOver()) {
+                System.out.println("Done !!");
+                solved = true;
+                break;
+            }
+
+            // Compute next candidates from new state (both colors, alternating - try current then opposite)
+            String movedColor = marbleToMove.startsWith("w") ? "w" : "b";
+            String otherColor = movedColor.equals("w") ? "b" : "w";
+
+            List<String> nextCandidates = new ArrayList<>();
+            // Try same color first, then other color
+            nextCandidates.addAll(getMovableMarblesInOrder(board.getBoard(), movedColor, board.getDoneMarbles(), null));
+            nextCandidates.addAll(getMovableMarblesInOrder(board.getBoard(), otherColor, board.getDoneMarbles(), null));
+
+            if (!nextCandidates.isEmpty()) {
+                dfsStack.push(new Object[]{
+                    new BoardState(board.getBoard(), board.getDoneMarbles(), marbleToMove, movedColor),
+                    nextCandidates,
+                    0
+                });
+            }
+            // else: no moves from this state, loop will backtrack
+        }
+
+        if (!solved) {
+            System.out.println("No solution !!");
+        }
     }
 
     public void menu() {
         Scanner scan = new Scanner(System.in);
         int marble_num;
         do {
-
             do {
                 System.out.printf("Enter number of white marbles = ");
                 marble_num = scan.nextInt();
@@ -385,27 +367,19 @@ public class MainApplication {
 
                         if (input.equalsIgnoreCase("A")) {
                             System.out.println("Switching to Auto Mode...");
-                            autoSolve(board, step);  // ← auto mode called here
+                            autoSolve(board, step);
                             break;
                         }
-                        
-                        
 
                         if (board.move(input, false)) {
                             System.out.printf("%15s : ", "Board");
                             board.printBoard();
                         }
                         step++;
-                        if (input.equalsIgnoreCase("A")) {
-                            System.out.println("Switching to Auto Mode...");
-
-                            break;
-                        }
 
                         if (board.isGameOver()) {
                             System.out.println("=".repeat(103));
                             System.out.println("You win!");
-
                             break;
                         }
                     }
@@ -425,7 +399,5 @@ public class MainApplication {
     public static void main(String[] args) {
         MainApplication mainapp = new MainApplication();
         mainapp.menu();
-
     }
 }
-
